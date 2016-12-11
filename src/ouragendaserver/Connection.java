@@ -45,7 +45,7 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
             //Tries to execute the login 5 times
             if(!login()){//Login Fail
                 try {
-                    out.writeUTF("LOGIN_FB|-status=FAIL");
+                    out.writeUTF("LOGIN_FB@-status=FAIL");
                 } catch (IOException ex) {
                     Logger.getLogger(Connection.class.getName()).log(Level.SEVERE, null, ex);
                 }
@@ -53,7 +53,7 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
             }
             loginSuccess = true;
             try {//Login Success
-                out.writeUTF("LOGIN_FB|-status=SUCCESS");
+                out.writeUTF("LOGIN_FB@-status=SUCCESS");
                 break;
             } catch (IOException ex) {
                 Logger.getLogger(Connection.class.getName()).log(Level.SEVERE, null, ex);
@@ -69,18 +69,18 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
                 if(buffer.equalsIgnoreCase("exit"))
                     break;
                 //out.writeUTF(buffer);
-                String[] section = buffer.split("|");
+                String[] section = buffer.split("@");
                 if(section.length<2)
-                    out.writeUTF("ERROR_FB|-rcvd="+buffer);
+                    out.writeUTF("ERROR_FB@-rcvd="+buffer);
                 switch(section[0]){
                     default:
-                        out.writeUTF("ERROR_FB|-rcvd="+buffer);
+                        out.writeUTF("ERROR_FB@-rcvd="+buffer);
                         break;
                     case "CREATE_EVENT":
                         requestResult = createEvent(buffer);
                         out.writeUTF(
-                                ((requestResult) ? "CREATE_EVENT_FB|-status=SUCCESS" 
-                                : "CREATE_EVENT_FB|-status=FAIL"));
+                                ((requestResult) ? "CREATE_EVENT_FB@-status=SUCCESS" 
+                                : "CREATE_EVENT_FB@-status=FAIL"));
                         break;
                         
                 }
@@ -97,7 +97,7 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
         String desc = null;
         String sql = null;
         
-        String[] section = message.split("|");
+        String[] section = message.split("@");
         if(section.length<3 || section.length>5)
             return false;
         if(!section[1].substring(0, 6).equalsIgnoreCase("-name=")){
@@ -109,7 +109,7 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
             System.out.println("param '-timestamp=' not found!");
             return false;
         }
-        eventName = section[2].substring(11);
+        timestamp = section[2].substring(11);
         
         if(section.length>3){
             if(!section[3].substring(0, 7).equalsIgnoreCase("-local=")){
@@ -127,23 +127,28 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
         }
         switch(section.length){
             case 3:
-                sql = "INSERT INTO Event (event_name, timestamp)"
-                        + "VALUES (\""+eventName+"\", \""+timestamp+"\")";
+                sql = "INSERT INTO \"public\".\"Event\" (event_name, timestamp, "
+                        + "owner_id) "
+                        + "VALUES (\'"+eventName+"\', \'"+timestamp+"\', "
+                        + user_id+")";
                 break;
             case 4:
-                sql = "INSERT INTO Event (event_name, timestamp)"
-                        + "VALUES (\""+eventName+"\", \""+timestamp+"\", \""
-                        +local+"\")";
+                sql = "INSERT INTO \"public\".\"Event\" (event_name, timestamp, "
+                        + "owner_id, local) "
+                        + "VALUES (\'"+eventName+"\', \'"+timestamp+"\', "
+                        +user_id+", \'"+local+"\')";
                 break;
             case 5:
-                sql = "INSERT INTO Event (event_name, timestamp)"
-                        + "VALUES (\""+eventName+"\", \""+timestamp+"\", \""
-                        +local+"\", \""+desc+"\")";
+                sql = "INSERT INTO \"public\".\"Event\" (event_name, timestamp, "
+                        + "owner_id, local, description) "
+                        + "VALUES (\'"+eventName+"\', TIMESTAMP WITH TIME ZONE \'"+timestamp+"\', "
+                        +user_id+", \'"+local+"\', \'"+desc+"\')";
                 break;
         }
         if(!postgresql.isConnectionActive())
             postgresql.connectToDB();
         long eventId = postgresql.processInsert(sql, "event_id");
+        System.out.println("New event created id="+eventId);
         return true; 
     }
     
@@ -155,7 +160,7 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
         
         try { //Test the login message and get the user information
             buffer = in.readUTF();
-            String[] section = buffer.split(":");
+            String[] section = buffer.split("@");
             if(!(section[0].equalsIgnoreCase("login"))){
                 System.out.println("Not a login operation!");
                 return false;

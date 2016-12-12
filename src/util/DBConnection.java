@@ -158,4 +158,33 @@ public class DBConnection {
         }
         return generatedKey;
     }
+    
+    public boolean processReturn() throws SQLException{
+        Statement stmt = null;
+        String url = "jdbc:postgresql://localhost/"+dbName;
+        Properties props = new Properties();
+        props.setProperty("user",user);
+        props.setProperty("password",password);
+        props.setProperty("ssl","false");
+        try{
+            conn = DriverManager.getConnection(url, props);
+            conn.setAutoCommit(false);
+            System.out.println("Opened database successfully");
+            stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery( "SELECT * FROM Event;" );
+             while ( rs.next() ) {
+                int id = rs.getInt("event_id");
+                String name = rs.getString("event_name");
+                System.out.println( "ID = " + id );
+                System.out.println( "NAME = " + name );
+                System.out.println();
+             }
+            rs.close();
+            stmt.close();
+        
+        }catch (SQLException ex) {
+            Logger.getLogger(DBConnection.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return true;
+    }
 }

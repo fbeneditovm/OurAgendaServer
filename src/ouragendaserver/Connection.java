@@ -5,6 +5,7 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.Socket;
+import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
@@ -82,6 +83,15 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
                                 ((requestResult) ? "CREATE_EVENT_FB@-status=SUCCESS" 
                                 : "CREATE_EVENT_FB@-status=FAIL"));
                         break;
+                    case "SHOW_EVENTS":
+                {
+                    try {
+                        requestResult = postgresql.processReturn();
+                    } catch (SQLException ex) {
+                        Logger.getLogger(Connection.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                }
+                    break;
                         
                 }
                 
@@ -219,4 +229,6 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
         System.out.println("Invalid password for given user "+userName+" !");
         return false;
     }
+    
+    
 }

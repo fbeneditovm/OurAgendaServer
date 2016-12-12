@@ -83,8 +83,8 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
                                 ((requestResult) ? "CREATE_EVENT_FB@-status=SUCCESS" 
                                 : "CREATE_EVENT_FB@-status=FAIL"));
                         break;
-                    case "SHOW_EVENTS":
-                        
+                    case "SHOW_EVENT":
+                        requestresult = showEvent();
                     break;
                         
                 }

@@ -84,13 +84,7 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
                                 : "CREATE_EVENT_FB@-status=FAIL"));
                         break;
                     case "SHOW_EVENTS":
-                {
-                    try {
-                        requestResult = postgresql.processReturn();
-                    } catch (SQLException ex) {
-                        Logger.getLogger(Connection.class.getName()).log(Level.SEVERE, null, ex);
-                    }
-                }
+                        
                     break;
                         
                 }
@@ -230,5 +224,30 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
         return false;
     }
     
-    
+    private boolean showEvent(){
+
+        if(!postgresql.isConnectionActive())
+            postgresql.connectToDB();
+
+        HashSet<String> columName = new HashSet<>();
+        columnName.add("event_name");
+        columnName.add("timestamp");
+        columnName.add("local");
+        columnName.add("description");
+        
+        String sql = "SELECT evt.\"event_name\", evt.\"timestamp\", evt.\"local\", evt.\"description\""
+                + "FROM \"public\".\"Event\" as evt.\"public\".\"Event_User\" as eu "
+                + "WHERE evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = '"+user_id+"'";
+
+        LinkedList<Map<String, String>> queryResult = postegresql.processSelectQuery(sql, columnName);
+
+        if(queryResult.size()<=0){
+            System.out.println("Event not found!");
+            return false;
+        }   
+
+        out.writeUTF(queryResult);
+
+        return true;
+    }
 }

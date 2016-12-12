@@ -97,6 +97,15 @@ public class DBConnection {
         return result;
     }
     
+    /**
+     * Process a select sql and return a set of results
+     * @param sql the full SELECT sql
+     * @param columnName a set of Strings were each string is the name of a column
+     * to return
+     * @return A LinkedList of Maps were each mapis a row result of
+     * the sql and each Map element has key=(column name) and
+     * value = (the respective column value).
+     */
     public LinkedList<Map<String, String>> processSelectQuerry(String sql, Set<String>columnName){
         LinkedList<Map<String, String>> result = new LinkedList<>();
         Statement st;

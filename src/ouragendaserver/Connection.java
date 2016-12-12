@@ -82,7 +82,6 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
                                 ((requestResult) ? "CREATE_EVENT_FB@-status=SUCCESS" 
                                 : "CREATE_EVENT_FB@-status=FAIL"));
                         break;
-                        
                 }
                 
             }
@@ -90,12 +89,14 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
         }catch(IOException e){System.out.println("IO: "+e.getMessage());}
     }
     
+    
     private  boolean createEvent(String message){
         String eventName = null;
         String timestamp = null;
         String local = null;
         String desc = null;
         String sql = null;
+        String sql2 = null;
         
         String[] section = message.split("@");
         if(section.length<3 || section.length>5)
@@ -122,20 +123,20 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
                     System.out.println("param '-desc=' not found!");
                     return false;
                 }
-                local = section[4].substring(6);
+                desc = section[4].substring(6);
             }
         }
         switch(section.length){
             case 3:
                 sql = "INSERT INTO \"public\".\"Event\" (event_name, timestamp, "
                         + "owner_id) "
-                        + "VALUES (\'"+eventName+"\', \'"+timestamp+"\', "
+                        + "VALUES (\'"+eventName+"\', TIMESTAMP WITH TIME ZONE \'"+timestamp+"\', "
                         + user_id+")";
                 break;
             case 4:
                 sql = "INSERT INTO \"public\".\"Event\" (event_name, timestamp, "
                         + "owner_id, local) "
-                        + "VALUES (\'"+eventName+"\', \'"+timestamp+"\', "
+                        + "VALUES (\'"+eventName+"\', TIMESTAMP WITH TIME ZONE \'"+timestamp+"\', "
                         +user_id+", \'"+local+"\')";
                 break;
             case 5:
@@ -149,6 +150,12 @@ public class Connection extends Thread{//Gerencia a conecção com um cliente es
             postgresql.connectToDB();
         long eventId = postgresql.processInsert(sql, "event_id");
         System.out.println("New event created id="+eventId);
+        
+        sql2 = "INSERT INTO \"public\".\"Event_User\" (event_id, user_id)"
+                + "VALUES ("+eventId+", "+user_id+")";
+        postgresql.processInsert(sql2, "user_id");
+        System.out.println("New Event_User created event_id="+eventId+
+                "\n user_id="+user_id);
         return true; 
     }
     

@@ -14,17 +14,16 @@ public class TCPServer {
     public TCPServer(int aPort){
         port = aPort;
     }
-    public boolean startServer(){//Inicia o server
+    public boolean startServer(){//Start the server
         boolean done = true;
         try{
             ServerSocket listenSocket = new ServerSocket(port);
-            System.out.println("Server Conectado na porta: "+port);
+            System.out.println("Server created on port: "+port);
             while(true){
                 //Aceita a conecção de um novo cliente
                 Socket clientSocket = listenSocket.accept();
-                System.out.println("Client socket recebido");
                 new Connection(clientSocket);
-                System.out.println("connection criado com sucesso");
+                System.out.println("new client connected");
             }
             
         }catch(IOException e){System.out.println("Listen: "+e.getMessage()); done = false;}

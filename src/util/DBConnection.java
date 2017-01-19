@@ -106,7 +106,7 @@ public class DBConnection {
      * the sql and each Map element has key=(column name) and
      * value = (the respective column value).
      */
-    public LinkedList<Map<String, String>> processSelectQuerry(String sql, Set<String>columnName){
+    public LinkedList<Map<String, String>> processSelectQuery(String sql, Set<String>columnName){
         LinkedList<Map<String, String>> result = new LinkedList<>();
         Statement st;
         try {

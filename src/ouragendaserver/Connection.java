@@ -126,23 +126,23 @@ public class Connection extends Thread{//A connection with one client
         String[] section = message.split("&");
         if(section.length!=3)
             return false;
-        if(!section[1].substring(0, 10).equalsIgnoreCase("-username=")){
-            System.out.println("param '-username=' not found!");
+        if(!section[1].substring(0, 3).equalsIgnoreCase("-u=")){
+            System.out.println("param '-u=' not found!");
             return false;
         }
         else 
-            username = section[1].substring(10);
-        if(!section[2].substring(0, 10).equalsIgnoreCase("-password=")){
-            System.out.println("param '-password=' not found!");
+            username = section[1].substring(3);
+        if(!section[2].substring(0, 3).equalsIgnoreCase("-p=")){
+            System.out.println("param '-p=' not found!");
             return false;
         }
         else
-            password = section[2].substring(10);
+            password = section[2].substring(3);
         
         //String strurl = "http://ouragenda.000webhostapp.com/insertuser.php?username="+username+"&password="+password;
         //return insertToWeDB(strurl);
         
-        String sql = "INSERT INTO \"public\".\"User\" (event_name, begin_user_password_hash"
+        String sql = "INSERT INTO \"public\".\"User\" (user_name, user_password_hash) "
                 + " VALUES (\'"+username+"\',"
                 + "\'"+PasswordStorage.createHash(password)+"\')";
         if(!postgresql.isConnectionActive())
@@ -151,37 +151,7 @@ public class Connection extends Thread{//A connection with one client
         System.out.println("New user created id="+userId);
         return true;
     }
-    /*
-    private boolean insertToWeDB(String strurl) throws PasswordStorage.CannotPerformOperationException, MalformedURLException, IOException {
-        URL url = new URL(strurl);
-        
-        String htmlresponse = null;
-        String line;
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        if( conn.getResponseCode() == HttpURLConnection.HTTP_OK ){
-            InputStream is = conn.getInputStream();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-            while ((line = reader.readLine()) != null){
-                htmlresponse += line;
-            }
-
-            reader.close();
-        }else{
-            System.out.println("Error");
-            InputStream is = conn.getErrorStream();
-            if(is!=null){
-                BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-                while ((line = reader.readLine()) != null){
-                    htmlresponse += line;
-                }
-            }
-        } 
-        System.out.println("\n\n\nFeedback:");
-        String fb = htmlresponse.substring(htmlresponse.indexOf("BEGINFB")+7, htmlresponse.indexOf("ENDFB"));
-        System.out.println(fb);
-        return fb.equalsIgnoreCase("true");
-    }
-    */
+    
     private String checkAvailable(String message){
         String[] section = message.split("&");
         String guest, begin, end;
@@ -339,6 +309,48 @@ public class Connection extends Thread{//A connection with one client
         System.out.println("New Event_User created event_id="+eventId+
                 "\n user_id="+user_id);
         return true; 
+    }
+    
+    private boolean deleteEvent(String message){
+        String[] section = message.split("&");
+        if(section.length!=2){
+            System.out.println("Invalid number of arguments");
+            return false;
+        }
+        
+        if(!section[1].substring(0, 10).equalsIgnoreCase("-event_id=")){
+            System.out.println("param '-event_id=' not found!");
+            return false;
+        }
+        String eventid = section[1].substring(10);
+        
+        //First we must test if there is an event owned by the current user
+        //with the given event_id
+        String sql = "SELECT evt.\"event_name\""
+                + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
+                + "WHERE evt.\"event_id\" = \'"+eventid+"\' AND "
+                + "evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = \'"+user_id+"\'";
+        
+        if(!postgresql.isConnectionActive())
+            postgresql.connectToDB();
+
+        HashSet<String> columnName = new HashSet<>();
+        columnName.add("event_name");
+        
+        LinkedList<Map<String, String>> queryResult = postgresql.processSelectQuery(sql, columnName);
+        
+        if(queryResult.size()<=0){
+            System.out.println("Event not found!");
+            return false;
+        }
+        
+        sql = "DELETE FROM \"public\".\"Event\" as evt"
+           + "WHERE evt.\"event_id\" = \'"+eventid+"\'";
+        
+        int nRowsUpdated = postgresql.processUpdate(sql);
+        System.out.println(""+nRowsUpdated+" rows updated!");
+        
+        return true;
     }
     
     private boolean login(){
@@ -525,5 +537,36 @@ public class Connection extends Thread{//A connection with one client
         }
         return busyTimes;
     }
+    
+    /*
+    private boolean insertToWeDB(String strurl) throws PasswordStorage.CannotPerformOperationException, MalformedURLException, IOException {
+        URL url = new URL(strurl);
+        
+        String htmlresponse = null;
+        String line;
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        if( conn.getResponseCode() == HttpURLConnection.HTTP_OK ){
+            InputStream is = conn.getInputStream();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+            while ((line = reader.readLine()) != null){
+                htmlresponse += line;
+            }
 
+            reader.close();
+        }else{
+            System.out.println("Error");
+            InputStream is = conn.getErrorStream();
+            if(is!=null){
+                BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+                while ((line = reader.readLine()) != null){
+                    htmlresponse += line;
+                }
+            }
+        } 
+        System.out.println("\n\n\nFeedback:");
+        String fb = htmlresponse.substring(htmlresponse.indexOf("BEGINFB")+7, htmlresponse.indexOf("ENDFB"));
+        System.out.println(fb);
+        return fb.equalsIgnoreCase("true");
+    }
+    */
 }

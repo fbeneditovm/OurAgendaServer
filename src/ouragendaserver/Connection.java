@@ -46,7 +46,6 @@ public class Connection extends Thread{//A connection with one client
         int i;
         boolean requestResult = false;
         boolean loginSuccess = false;
-        /*          //NAO EXCLUIR
         for(i=0; i<5;i++){
             //Tries to execute the login 5 times
             if(!login()){//Login Fail
@@ -68,7 +67,6 @@ public class Connection extends Thread{//A connection with one client
         
         if(!loginSuccess)
             return;
-        */
         try{//Esse laço fica ativo enquanto o cliente está online
             while(!clientSocket.isClosed()){
                 buffer = in.readUTF();
@@ -78,7 +76,7 @@ public class Connection extends Thread{//A connection with one client
                 String[] section = buffer.split("&");
                 if(section.length<2)
                     out.writeUTF("ERROR_FB&-rcvd="+buffer);
-                switch(section[0]){
+                switch(section[0].toUpperCase()){
                     default:
                         out.writeUTF("ERROR_FB&-rcvd="+buffer);
                         break;
@@ -88,18 +86,31 @@ public class Connection extends Thread{//A connection with one client
                         } catch (PasswordStorage.CannotPerformOperationException ex) {
                             Logger.getLogger(Connection.class.getName()).log(Level.SEVERE, null, ex);
                         }
-                        out.writeUTF(
-                                ((requestResult) ? "CREATE_USER_FB&-status=SUCCESS" 
-                                : "CREATE_USER_FB&-status=FAIL"));
+                        out.writeUTF((requestResult) ? "CREATE_USER_FB&-status=SUCCESS" 
+                                : "CREATE_USER_FB&-status=FAIL");
                         break;
                     case "CREATE_EVENT":
                         requestResult = createEvent(buffer);
-                        out.writeUTF(
-                                ((requestResult) ? "CREATE_EVENT_FB&-status=SUCCESS" 
-                                : "CREATE_EVENT_FB&-status=FAIL"));
+                        out.writeUTF((requestResult) ? "CREATE_EVENT_FB&-status=SUCCESS" 
+                                : "CREATE_EVENT_FB&-status=FAIL");
                         break;
                     case "SHOW_EVENTS":
-                        showEvent();
+                        LinkedList<String> listResult = showEvents(buffer);
+                        if(listResult==null)
+                            out.writeUTF("SHOW_EVENTS_FB&-status=FAIL");
+                        else{
+                            out.writeUTF("SHOW_EVENTS_FB&-status=SUCCESS&-n_events="+listResult.size());
+                            for(String resulti:listResult)
+                                out.writeUTF(resulti);
+                        }
+                        break;
+                    case "CHECK_AVAILABLE":
+                        out.writeUTF("CHECK_AVAILABLE_FB"+
+                                checkAvailable(buffer));
+                        break;
+                    case "GET_BUSY_TIMES":
+                        out.writeUTF("GET_BUSY_TIMES_FB"
+                                +getBusyTimes(buffer));
                         break;
                 }
                 
@@ -108,7 +119,7 @@ public class Connection extends Thread{//A connection with one client
         }catch(IOException e){System.out.println("IO: "+e.getMessage());}
     }
     
-    private boolean createUser(String message) throws PasswordStorage.CannotPerformOperationException, IOException{
+    private boolean createUser(String message) throws PasswordStorage.CannotPerformOperationException{
         String username = null;
         String password = null;
         
@@ -128,11 +139,19 @@ public class Connection extends Thread{//A connection with one client
         else
             password = section[2].substring(10);
         
-        String strurl = "http://ouragenda.000webhostapp.com/insertuser.php?username="+username+"&password="+password;
+        //String strurl = "http://ouragenda.000webhostapp.com/insertuser.php?username="+username+"&password="+password;
+        //return insertToWeDB(strurl);
         
-        return insertToWeDB(strurl);
+        String sql = "INSERT INTO \"public\".\"User\" (event_name, begin_user_password_hash"
+                + " VALUES (\'"+username+"\',"
+                + "\'"+PasswordStorage.createHash(password)+"\')";
+        if(!postgresql.isConnectionActive())
+            postgresql.connectToDB();
+        long userId = postgresql.processInsert(sql, "user_id");
+        System.out.println("New user created id="+userId);
+        return true;
     }
-    
+    /*
     private boolean insertToWeDB(String strurl) throws PasswordStorage.CannotPerformOperationException, MalformedURLException, IOException {
         URL url = new URL(strurl);
         
@@ -162,61 +181,151 @@ public class Connection extends Thread{//A connection with one client
         System.out.println(fb);
         return fb.equalsIgnoreCase("true");
     }
+    */
+    private String checkAvailable(String message){
+        String[] section = message.split("&");
+        String guest, begin, end;
+        if(section.length!=4){
+            System.out.println("Invalid number of arguments");
+            return "&-status=FAIL";
+        }
+        if(!section[1].substring(0, 7).equalsIgnoreCase("-guest=")){
+            System.out.println("param '-guest=' not found!");
+            return "&-status=FAIL";
+        }
+        guest = section[1].substring(7);
+        
+        if(!section[2].substring(0, 7).equalsIgnoreCase("-begin=")){
+            System.out.println("param '-begin=' not found!");
+            return "&-status=FAIL";
+        }
+        begin = section[2].substring(7);
+        
+        if(!section[3].substring(0, 5).equalsIgnoreCase("-end=")){
+            System.out.println("param '-end=' not found!");
+            return "&-status=FAIL";
+        }
+        end = section[3].substring(5);
+        
+        String toReturn = "&-status=SUCCESS";
+        
+        toReturn += (checkAvailability(guest, begin, end)) ? "&-available=TRUE"
+                : "&-available=FALSE";
+        
+        return toReturn;
+    }
+    
+    private String getBusyTimes(String message){
+        String[] section = message.split("&");
+        String guest, date;
+        String toReturn;
+        if(section.length!=3){
+            System.out.println("Invalid number of arguments");
+            toReturn = "&-status=FAIL";
+            return toReturn;
+        }
+        if(!section[1].substring(0, 7).equalsIgnoreCase("-guest=")){
+            System.out.println("param '-guest=' not found!");
+            toReturn = "&-status=FAIL";
+            return toReturn;
+        }
+        guest = section[1].substring(7);
+        
+        if(!section[2].substring(0, 6).equalsIgnoreCase("-date=")){
+            System.out.println("param '-begin=' not found!");
+            toReturn = "&-status=FAIL";
+            return toReturn;
+        }
+        date = section[2].substring(6);
+        
+        toReturn = "&-status=SUCCESS&-events=";
+        LinkedList<String> busyTimes = getUserBusyTimes(guest, date);
+        
+        if(busyTimes.size()<=0){
+            toReturn += "NO_EVENTS";
+            return toReturn;
+        }
+        
+        for(int i=0; i<busyTimes.size(); i++){
+            toReturn += (i+1)+"("+busyTimes.get(i)+"),";
+        }
+        toReturn = toReturn.substring(0, toReturn.length()-1);//Removes the last coma
+        return toReturn;
+    }
     
     private  boolean createEvent(String message){
         String eventName = null;
-        String timestamp = null;
+        String begin = null;
+        String end = null;
         String local = null;
         String desc = null;
         String sql = null;
         String sql2 = null;
         
         String[] section = message.split("&");
-        if(section.length<3 || section.length>5)
+        if(section.length<4 || section.length>6){
+            System.out.println("Invalid number of arguments");
             return false;
+        }
+        
         if(!section[1].substring(0, 6).equalsIgnoreCase("-name=")){
             System.out.println("param '-name=' not found!");
             return false;
         }
         eventName = section[1].substring(6);
-        if(!section[2].substring(0, 11).equalsIgnoreCase("-timestamp=")){
-            System.out.println("param '-timestamp=' not found!");
+        
+        if(!section[2].substring(0, 7).equalsIgnoreCase("-begin=")){
+            System.out.println("param '-begin=' not found!");
             return false;
         }
-        timestamp = section[2].substring(11);
+        begin = section[2].substring(7);
         
-        if(section.length>3){
-            if(section[3].substring(0, 7).equalsIgnoreCase("-local=")){
-                local = section[3].substring(7);
-                if(section.length>4){
-                    if(section[4].substring(0, 6).equalsIgnoreCase("-desc=")){
-                        desc = section[4].substring(6);
+        if(!section[3].substring(0, 5).equalsIgnoreCase("-end=")){
+            System.out.println("param '-end' not found!");
+            return false;
+        }
+        end = section[3].substring(5);
+        
+        if(section.length>4){
+            if(section[4].substring(0, 7).equalsIgnoreCase("-local=")){
+                local = section[4].substring(7);
+                if(section.length>5){
+                    if(section[5].substring(0, 6).equalsIgnoreCase("-desc=")){
+                        desc = section[5].substring(6);
                         sql = "INSERT INTO \"public\".\"Event\" (event_name, "
-                            + "timestamp, owner_id, local, description) "
+                            + "begin_timestamp, end_timestamp, owner_id, local, description) "
                             + "VALUES (\'"+eventName+"\', TIMESTAMP WITH TIME ZONE "
-                            + "\'"+timestamp+"\', "+user_id+", \'"+local+"\', \'"+desc+"\')";
-                    }else//if there are 4 parameters and the 4th is not desc
+                            + "\'"+begin+"\', TIMESTAMP WITH TIME ZONE "
+                            + "\'"+end+"\', "+user_id+", \'"+local+"\', \'"+desc+"\')";
+                    }else{//if there are 5 parameters and the 5th is not desc
+                        System.out.println("5 param and no '-desc'");
                         return false;
-                }else{//if there are 3 parameters and the 3 is local
+                    }
+                }else{//if there are 4 parameters and the 4th is local
                     sql = "INSERT INTO \"public\".\"Event\" (event_name, "
-                        + "timestamp, owner_id, local) VALUES "
-                        + "(\'"+eventName+"\', TIMESTAMP WITH TIME ZONE \'"
-                        +timestamp+"\', "+user_id+", \'"+local+"\')";
+                        + "begin_timestamp, end_timestamp, owner_id, local) VALUES "
+                        + "(\'"+eventName+"\', TIMESTAMP WITH TIME ZONE "
+                        + "\'"+begin+"\', TIMESTAMP WITH TIME ZONE "
+                        + "\'"+end+"\', "+user_id+", \'"+local+"\')";
                 }
-            }else{//if there are 3 parameters and the 3rd is not local
-                if(section[3].substring(0, 6).equalsIgnoreCase("-desc=")){
-                    desc = section[3].substring(6);
+            }else{//if there are 4 parameters and the 4th is not local
+                if(section[4].substring(0, 6).equalsIgnoreCase("-desc=")){
+                    desc = section[4].substring(6);
                     sql = "INSERT INTO \"public\".\"Event\" (event_name, "
-                        + "timestamp, owner_id, description) VALUES "
-                        + "(\'"+eventName+"\', TIMESTAMP WITH TIME ZONE \'"
-                        +timestamp+"\', "+user_id+",  \'"+desc+"\')";
-                }else
+                        + "begin_timestamp, end_timestamp, owner_id, description) VALUES "
+                        + "(\'"+eventName+"\', TIMESTAMP WITH TIME ZONE "
+                        + "\'"+begin+"\', TIMESTAMP WITH TIME ZONE "
+                        + "\'"+end+"\', "+user_id+",  \'"+desc+"\')";
+                }else{
+                    System.out.println("4 param and no local or desc");
                     return false;
+                }
             }
-        }else{//if there are only 2 parameters (name and timestamp)
-            sql = "INSERT INTO \"public\".\"Event\" (event_name, timestamp, "
-                + "owner_id) VALUES (\'"+eventName+"\', "
-                + "TIMESTAMP WITH TIME ZONE \'"+timestamp+"\', "+ user_id+")";
+        }else{//if there are only 3 parameters (name and timestamps)
+            sql = "INSERT INTO \"public\".\"Event\" (event_name, begin_timestamp, "
+                + "end_timestamp, owner_id) VALUES (\'"+eventName+"\', "
+                + "TIMESTAMP WITH TIME ZONE \'"+begin+"\', "
+                + "TIMESTAMP WITH TIME ZONE \'"+end+"\', "+ user_id+")";
         }
         
         if(!postgresql.isConnectionActive())
@@ -238,7 +347,7 @@ public class Connection extends Thread{//A connection with one client
         String password = null;
         
         
-        try { //Test the login message and get the user information
+        try { //Test the login message and get the user information 
             buffer = in.readUTF();
             String[] section = buffer.split("&");
             if(!(section[0].equalsIgnoreCase("login"))){
@@ -300,56 +409,121 @@ public class Connection extends Thread{//A connection with one client
         return false;
     }
     
-    private boolean showEvent(){
+    private LinkedList<String> showEvents(String message){
+        String date;
+        
+        String[] section = message.split("&");
+        if(section.length!=2){
+            System.out.println("Invalid number of arguments");
+            return null;
+        }
+        
+        if(!section[1].substring(0, 6).equalsIgnoreCase("-date=")){
+            System.out.println("param '-date=' not found!");
+            return null;
+        }
+        date = section[1].substring(6);
+        String sql = "";
+        if(date.equalsIgnoreCase("ALL")){
+            sql = "SELECT evt.\"event_name\", evt.\"begin_timestamp\", "
+                + "evt.\"end_timestamp\", evt.\"local\", evt.\"description\""
+                + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
+                + "WHERE evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = \'"+user_id+"\'";
+        }else{
+            sql = "SELECT evt.\"event_name\", evt.\"begin_timestamp\", "
+                + "evt.\"end_timestamp\", evt.\"local\", evt.\"description\""
+                + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
+                + "WHERE evt.\"event_id\" = eu.\"event_id\" AND "
+                + "eu.\"user_id\" = \'"+user_id+"\' AND begin_timestamp::date = \'"+date+"\'";
+        }
 
         if(!postgresql.isConnectionActive())
             postgresql.connectToDB();
 
         HashSet<String> columnName = new HashSet<>();
         columnName.add("event_name");
-        columnName.add("timestamp");
+        columnName.add("begin_timestamp");
+        columnName.add("end_timestamp");
         columnName.add("local");
         columnName.add("description");
         
-        String sql = "SELECT evt.\"event_name\", evt.\"timestamp\", evt.\"local\", evt.\"description\""
-                + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
-                + "WHERE evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = '"+user_id+"'";
-
         LinkedList<Map<String, String>> queryResult = postgresql.processSelectQuery(sql, columnName);
-
+        LinkedList<String> toReturn = new LinkedList<>();
+        
         if(queryResult.size()<=0){
             System.out.println("Event not found!");
-            return false;
-        }   
-
-        try {
-            out.writeUTF(queryResult.toString());
-        } catch (IOException ex) {
-            Logger.getLogger(Connection.class.getName()).log(Level.SEVERE, null, ex);
+            return toReturn;
         }
-
-        return true;
+        
+        for(int i=0; i<queryResult.size(); i++){
+            toReturn.add("EVENT&-eventn="+i
+                    + "&-event_name="+queryResult.get(i).get("event_name")
+                    + "&-begin_timestamp="+queryResult.get(i).get("begin_timestamp")
+                    + "&-end_timestamp="+queryResult.get(i).get("end_timestamp")
+                    + "&-local="+queryResult.get(i).get("local")
+                    + "&-desc="+queryResult.get(i).get("description"));
+        }
+        
+        return toReturn;
     }
-    /*
-    private boolean checkAvailability(long user, String timestamp){
-        
-        int maxMinutes, minMinutes;
-        
+    
+    private boolean checkAvailability(String user_name, String begin_timestamp, String end_timestamp){
         if(!postgresql.isConnectionActive())
             postgresql.connectToDB();
         
-        String[] section = timestamp.split(":");
-        maxMinutes = Integer.parseInt(section[1])+10;
-        minMinutes = maxMinutes-20;//-----precisa levar em conta que os minutos variam entre 0-60--------
-        
         HashSet<String> columnName = new HashSet<>();
         
-        columnName.add("timestamp");
+        columnName.add("begin_timestamp");
         
-        String sql = "SELECT evt.\"timestamp\" "
-                + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
-                + "WHERE evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = '"+user+"' "
-                + "AND ";
+        String sql = "SELECT evt.\"begin_timestamp\" "
+                + "FROM \"public\".\"Event\" as evt, "
+                + "\"public\".\"Event_User\" as eu, \"public\".\"User\" as u "
+                + "WHERE u.\"user_name\" = \'"+user_name+"\' AND eu.\"user_id\" = u.\"user_id\" "
+                + "AND evt.\"event_id\" = eu.\"event_id\" AND NOT "                          //Excluding the cases when
+                + "(evt.begin_timestamp>TIMESTAMP WITH TIME ZONE \'"+end_timestamp+"\' "     //The event starts after the end_timestamp
+                + "OR evt.end_timestamp<=TIMESTAMP WITH TIME ZONE \'"+begin_timestamp+"\')"; //or ends before the begin_timestamp
+                
+        
+        LinkedList<Map<String, String>> queryResult = postgresql.processSelectQuery(sql, columnName);
+
+        if(queryResult.size()<=0)//If there is no event between the two given timestamps
+            return true;
+        return false;
     }
-    */
+     /**
+     * Gets all busy times for that user on the specified date
+     * @param user the user_id for the user to consult
+     * @param date a string containing a date in the format: YYYY-MM-DD
+     * @return a LinkedList of Strings in the format: begin_time&end_time
+     */
+    private LinkedList<String> getUserBusyTimes(String user_name, String date){
+        if(!postgresql.isConnectionActive())
+            postgresql.connectToDB();
+        
+        LinkedList<String> busyTimes = new LinkedList<>();
+        HashSet<String> columnName = new HashSet<>();
+        
+        columnName.add("begin");
+        columnName.add("end");
+        
+        String sql = "SELECT evt.\"begin_timestamp\"::time as begin, evt.\"end_timestamp\"::time as end "
+                + "FROM \"public\".\"Event\" as evt, "
+                + "\"public\".\"Event_User\" as eu, \"public\".\"User\" as u "
+                + "WHERE u.\"user_name\" = \'"+user_name+"\' AND eu.\"user_id\" = u.\"user_id\" "
+                + "AND evt.\"event_id\" = eu.\"event_id\" "
+                + "AND evt.\"begin_timestamp\"::date = \'"+date+"\'";
+        
+        LinkedList<Map<String, String>> queryResult = postgresql.processSelectQuery(sql, columnName);
+        
+        if(queryResult.size()>0){//If there are events on that date
+            for(Map<String, String> queryResulti : queryResult){
+                String eventTime = new String();
+                eventTime = (String)queryResulti.get("begin")+"TO"
+                          + (String)queryResulti.get("end");
+                busyTimes.add(eventTime);
+            }
+        }
+        return busyTimes;
+    }
+
 }

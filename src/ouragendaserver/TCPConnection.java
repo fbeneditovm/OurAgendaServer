@@ -126,6 +126,17 @@ public class TCPConnection extends Thread implements Connection{//A connection w
                                 out.writeUTF(resulti);
                         }
                         break;
+                    case "SHOW_USERS":
+                        listResult = showUsers();
+                        if(listResult==null)
+                            out.writeUTF("SHOW_USERS_FB&-status=FAIL");
+                        else{
+                            out.writeUTF("SHOW_USERS_FB&-status=SUCCESS"
+                                       + "&-n_users="+listResult.size());
+                            for(String resulti:listResult)
+                                out.writeUTF(resulti);
+                        }
+                        break;
                     case "CHECK_AVAILABLE":
                         out.writeUTF("CHECK_AVAILABLE_FB"+
                                 checkAvailable(buffer));
@@ -135,7 +146,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
                                 +getBusyIntervals(buffer));
                         break;
                     
-                    case "GET_NOTIFICATIONS"://TESTAR
+                    case "GET_NOTIFICATIONS":
                         listResult = getNotifications();
                         if(listResult==null)
                             out.writeUTF("GET_NOTIFICATIONS_FB&-status=FAIL");
@@ -726,6 +737,38 @@ public class TCPConnection extends Thread implements Connection{//A connection w
                     + "&-local="+queryResult.get(i).get("local")
                     + "&-desc="+queryResult.get(i).get("description")
                     + "&-acc="+queryResult.get(i).get("accepted"));
+        }
+        
+        return toReturn;
+    }
+    
+    private LinkedList<String> showUsers(){
+        //Get the user information at the database
+        if(!postgresql.isConnectionActive())
+            postgresql.connectToDB();
+        HashSet<String> columnName = new HashSet<>();
+        columnName.add("user_id");
+        columnName.add("user_name");
+        
+        String sql = "SELECT u.\"user_id\", u.\"user_name\" "
+                + "FROM \"public\".\"User\" as u ";
+        LinkedList<Map<String, String>> queryResult = postgresql.processSelectQuery(sql, columnName);
+        LinkedList<String> toReturn = new LinkedList<>();
+        if(queryResult.size()<=1){
+            System.out.println("User not found!");
+            return toReturn;
+        }
+        
+        int i=0;
+        //Add the users to the LinkedList that will be returned
+        for(Map<String, String> queryResulti : queryResult){
+            //if the user is not the current user
+            if(my_user_id!=Long.parseLong(queryResulti.get("user_id"))){
+                toReturn.add("USER&-usern="+i
+                        + "&-id="+queryResulti.get("user_id")
+                        + "&-name="+queryResulti.get("user_name"));
+                i++;
+            }
         }
         
         return toReturn;

@@ -1,16 +1,10 @@
 package ouragendaserver;
 
-import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.Socket;
-import java.net.URL;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
@@ -23,12 +17,12 @@ import util.PasswordStorage;
  * This class represents a connection to a TCP Client Socket
  * @author fbeneditovm
  */
-
 public class TCPConnection extends Thread implements Connection{//A connection with one client
     DataInputStream in;//Gets the Client input
     DataOutputStream out;//Sends output to the Client
     Socket clientSocket;//The socket to communicate with the client
-    long user_id;//The id for the user logged using this Connection
+    long my_user_id;//The user_id of the user logged using this Connection
+    String my_user_name;//The user_name of the user logged using this Connection
     int port;//The client's server port
     DBConnection postgresql;
     Server server;
@@ -111,12 +105,17 @@ public class TCPConnection extends Thread implements Connection{//A connection w
                         out.writeUTF((requestResult) ? "UPDATE_EVENT_FB&-status=SUCCESS" 
                                 : "UPDATE_EVENT_FB&-status=FAIL");
                         break;
-                    case "INVITE:"://TESTAR
+                    case "INVITE":
                         requestResult = inviteToEvent(buffer);
                         out.writeUTF((requestResult) ? "INVITE_FB&-status=SUCCESS" 
                                 : "INVITE_FB&-status=FAIL");
                         break;
-                    case "SHOW_EVENTS"://TESTAR
+                    case "ANSWER_INVITATION":
+                        requestResult = answerInvitation(buffer);
+                        out.writeUTF((requestResult) ? "ANSWER_INVITATION_FB&-status=SUCCESS" 
+                                : "ANSWER_INVITATION_FB&-status=FAIL");
+                        break;
+                    case "SHOW_EVENTS":
                         listResult = showEvents(buffer);
                         if(listResult==null)
                             out.writeUTF("SHOW_EVENTS_FB&-status=FAIL");
@@ -182,13 +181,13 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         if(section.length!=3)
             return false;
         if(!section[1].substring(0, 3).equalsIgnoreCase("-u=")){
-            System.out.println("param '-u=' not found!");
+            System.out.println("arg '-u=' not found!");
             return false;
         }
         else 
             username = section[1].substring(3);
         if(!section[2].substring(0, 3).equalsIgnoreCase("-p=")){
-            System.out.println("param '-p=' not found!");
+            System.out.println("arg '-p=' not found!");
             return false;
         }
         else
@@ -220,19 +219,19 @@ public class TCPConnection extends Thread implements Connection{//A connection w
             return "&-status=FAIL";
         }
         if(!section[1].substring(0, 7).equalsIgnoreCase("-guest=")){
-            System.out.println("param '-guest=' not found!");
+            System.out.println("arg '-guest=' not found!");
             return "&-status=FAIL";
         }
         guest = section[1].substring(7);
         
         if(!section[2].substring(0, 7).equalsIgnoreCase("-begin=")){
-            System.out.println("param '-begin=' not found!");
+            System.out.println("arg '-begin=' not found!");
             return "&-status=FAIL";
         }
         begin = section[2].substring(7);
         
         if(!section[3].substring(0, 5).equalsIgnoreCase("-end=")){
-            System.out.println("param '-end=' not found!");
+            System.out.println("arg '-end=' not found!");
             return "&-status=FAIL";
         }
         end = section[3].substring(5);
@@ -264,14 +263,14 @@ public class TCPConnection extends Thread implements Connection{//A connection w
             return toReturn;
         }
         if(!section[1].substring(0, 7).equalsIgnoreCase("-guest=")){
-            System.out.println("param '-guest=' not found!");
+            System.out.println("arg '-guest=' not found!");
             toReturn = "&-status=FAIL";
             return toReturn;
         }
         guest = section[1].substring(7);
         
         if(!section[2].substring(0, 6).equalsIgnoreCase("-date=")){
-            System.out.println("param '-begin=' not found!");
+            System.out.println("arg '-begin=' not found!");
             toReturn = "&-status=FAIL";
             return toReturn;
         }
@@ -310,19 +309,19 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         }
         
         if(!section[1].substring(0, 6).equalsIgnoreCase("-name=")){
-            System.out.println("param '-name=' not found!");
+            System.out.println("arg '-name=' not found!");
             return false;
         }
         eventName = section[1].substring(6);
         
         if(!section[2].substring(0, 7).equalsIgnoreCase("-begin=")){
-            System.out.println("param '-begin=' not found!");
+            System.out.println("arg '-begin=' not found!");
             return false;
         }
         begin = section[2].substring(7);
         
         if(!section[3].substring(0, 5).equalsIgnoreCase("-end=")){
-            System.out.println("param '-end' not found!");
+            System.out.println("arg '-end' not found!");
             return false;
         }
         end = section[3].substring(5);
@@ -337,36 +336,36 @@ public class TCPConnection extends Thread implements Connection{//A connection w
                             + "begin_timestamp, end_timestamp, owner_id, local, description) "
                             + "VALUES (\'"+eventName+"\', TIMESTAMP WITH TIME ZONE "
                             + "\'"+begin+"\', TIMESTAMP WITH TIME ZONE "
-                            + "\'"+end+"\', "+user_id+", \'"+local+"\', \'"+desc+"\')";
-                    }else{//if there are 5 parameters and the 5th is not desc
-                        System.out.println("5 param and no '-desc'");
+                            + "\'"+end+"\', "+my_user_id+", \'"+local+"\', \'"+desc+"\')";
+                    }else{//if there are 5 arguments and the 5th is not desc
+                        System.out.println("5 args and no '-desc'");
                         return false;
                     }
-                }else{//if there are 4 parameters and the 4th is local
+                }else{//if there are 4 arguments and the 4th is local
                     sql = "INSERT INTO \"public\".\"Event\" (event_name, "
                         + "begin_timestamp, end_timestamp, owner_id, local) VALUES "
                         + "(\'"+eventName+"\', TIMESTAMP WITH TIME ZONE "
                         + "\'"+begin+"\', TIMESTAMP WITH TIME ZONE "
-                        + "\'"+end+"\', "+user_id+", \'"+local+"\')";
+                        + "\'"+end+"\', "+my_user_id+", \'"+local+"\')";
                 }
-            }else{//if there are 4 parameters and the 4th is not local
+            }else{//if there are 4 arguments and the 4th is not local
                 if(section[4].substring(0, 6).equalsIgnoreCase("-desc=")){
                     desc = section[4].substring(6);
                     sql = "INSERT INTO \"public\".\"Event\" (event_name, "
                         + "begin_timestamp, end_timestamp, owner_id, description) VALUES "
                         + "(\'"+eventName+"\', TIMESTAMP WITH TIME ZONE "
                         + "\'"+begin+"\', TIMESTAMP WITH TIME ZONE "
-                        + "\'"+end+"\', "+user_id+",  \'"+desc+"\')";
+                        + "\'"+end+"\', "+my_user_id+",  \'"+desc+"\')";
                 }else{
-                    System.out.println("4 param and no local or desc");
+                    System.out.println("4 arg and no local or desc");
                     return false;
                 }
             }
-        }else{//if there are only 3 parameters (name and timestamps)
+        }else{//if there are only 3 arguments (name and timestamps)
             sql = "INSERT INTO \"public\".\"Event\" (event_name, begin_timestamp, "
                 + "end_timestamp, owner_id) VALUES (\'"+eventName+"\', "
                 + "TIMESTAMP WITH TIME ZONE \'"+begin+"\', "
-                + "TIMESTAMP WITH TIME ZONE \'"+end+"\', "+ user_id+")";
+                + "TIMESTAMP WITH TIME ZONE \'"+end+"\', "+ my_user_id+")";
         }
         
         if(!postgresql.isConnectionActive())
@@ -375,10 +374,10 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         System.out.println("New event created id="+eventId);
         
         sql2 = "INSERT INTO \"public\".\"Event_User\" (event_id, user_id)"
-                + "VALUES ("+eventId+", "+user_id+")";
+                + "VALUES ("+eventId+", "+my_user_id+")";
         postgresql.processInsert(sql2, "user_id");
         System.out.println("New Event_User created event_id="+eventId+
-                "\n user_id="+user_id+", accepted=TRUE");
+                "\n user_id="+my_user_id+", accepted=TRUE");
         return true; 
     }
     
@@ -394,7 +393,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         }
         
         if(!section[1].substring(0, 10).equalsIgnoreCase("-event_id=")){
-            System.out.println("param '-event_id=' not found!");
+            System.out.println("arg '-event_id=' not found!");
             return false;
         }
         long eventid = Long.parseLong(section[1].substring(10));
@@ -404,7 +403,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         String sql = "SELECT evt.\"event_name\", evt.\"begin_timestamp\", evt.\"end_timestamp\""
                 + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
                 + "WHERE evt.\"event_id\" = \'"+eventid+"\' AND "
-                + "evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = "+user_id+"";
+                + "evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = "+my_user_id+"";
         
         if(!postgresql.isConnectionActive())
             postgresql.connectToDB();
@@ -432,7 +431,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         //Notify the guests
         sql = "SELECT eu.\"user_id\" "
             + "FROM \"public\".\"Event_User\" as eu "
-            + "WHERE eu.\"event_id\" = ";
+            + "WHERE eu.\"event_id\" = "+eventid;
         
         columnName = new HashSet<>();
         columnName.add("user_id");
@@ -466,6 +465,8 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         String end = null;
         String local = null;
         String desc = null;
+        String notificationtxt;
+        Long guestid;
         
         //Get the arguments from the message string
         String[] section = message.split("&");
@@ -475,7 +476,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         }
         
         if(!section[1].substring(0, 10).equalsIgnoreCase("-event_id=")){
-            System.out.println("param '-event_id=' not found!");
+            System.out.println("arg '-event_id=' not found!");
             return false;
         }
         String eventid = section[1].substring(10);
@@ -483,32 +484,40 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         //Starts the sql that will update the Event table
         String sqlUpdate = "UPDATE \"public\".\"Event\" as evt SET";
         
+        //Starts the notification text that will be sent to the guests
+        notificationtxt = "EVENT_UPDATED";
+        
         //The other arguments are optional so we must check if 
         //they are in the message and add them to the sql
         for(String buffer:section){
             if(buffer.startsWith("-name")){
                 eventName = buffer.substring(6);
                 sqlUpdate += " \"event_name\" = \'"+eventName+"\',";
+                notificationtxt += "&-name="+eventName;
                 continue;
             }
             if(buffer.startsWith("-begin")){
                 begin = buffer.substring(7);
                 sqlUpdate += " \"begin_timestamp\" = \'"+begin+"\',";
+                notificationtxt += "&-begin_timestamp="+begin;
                 continue;
             }
             if(buffer.startsWith("-end")){
                 end = buffer.substring(5);
                 sqlUpdate += " \"end_timestamp\" = \'"+end+"\',";
+                notificationtxt += "&-end_timestamp="+end;
                 continue;
             }
             if(buffer.startsWith("-local")){
                 local = buffer.substring(7);
                 sqlUpdate += " \"local\" = \'"+local+"\',";
+                notificationtxt += "&-local="+local;
                 continue;
             }
             if(buffer.startsWith("-desc")){
                 desc = buffer.substring(6);
                 sqlUpdate += " \"description\" = \'"+desc+"\',";
+                notificationtxt += "&-desc="+desc;
                 continue;
             }
         }
@@ -520,7 +529,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         String sqlSelect = "SELECT evt.\"event_name\""
                 + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
                 + "WHERE evt.\"event_id\" = \'"+eventid+"\' AND "
-                + "evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = \'"+user_id+"\'";
+                + "evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = \'"+my_user_id+"\'";
         
         if(!postgresql.isConnectionActive())
             postgresql.connectToDB();
@@ -543,6 +552,20 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         int nRowsUpdated = postgresql.processUpdate(sqlUpdate);
         System.out.println(""+nRowsUpdated+" rows updated!");
         
+        //Notify the guests
+        String sqlGuests = "SELECT eu.\"user_id\" "
+            + "FROM \"public\".\"Event_User\" as eu "
+            + "WHERE eu.\"event_id\" = "+eventid;
+        
+        columnName = new HashSet<>();
+        columnName.add("user_id");
+        
+        queryResult = postgresql.processSelectQuery(sqlGuests, columnName);
+        for(Map<String, String> queryResulti : queryResult){
+            guestid = Long.parseLong(queryResulti.get("user_id"));
+            notify(guestid, notificationtxt);
+        }
+        
         return true;
     }
     
@@ -564,12 +587,12 @@ public class TCPConnection extends Thread implements Connection{//A connection w
                 return false;
             }
             if(!section[1].substring(0, 3).equalsIgnoreCase("-u=")){
-                System.out.println("param '-u=' not found!");
+                System.out.println("arg '-u=' not found!");
                 return false;
             }
             userName = section[1].substring(3);
             if(!section[2].substring(0, 3).equalsIgnoreCase("-p=")){
-                System.out.println("param '-p=' not found!");
+                System.out.println("arg '-p=' not found!");
                 return false;
             }
             password = section[2].substring(3);
@@ -600,19 +623,21 @@ public class TCPConnection extends Thread implements Connection{//A connection w
             String user_password_hash = queryResulti.get("user_password_hash");
             try {
                 if(PasswordStorage.verifyPassword(password, user_password_hash)){
-                    user_id = Long.parseLong(str_user_id);
-                    server.userLogin(user_id, this);
+                    my_user_id = Long.parseLong(str_user_id);
+                    my_user_name = userName;
+                    server.userLogin(my_user_id, this);
                     if(testNewNotifications()){
                         Thread t = new Thread(new Runnable() {
                             public void run(){
                                 try {
                                     Thread.sleep(600);
+                                    askToCheckNotifications();
                                 } catch (InterruptedException ex) {
                                     Logger.getLogger(TCPConnection.class.getName()).log(Level.SEVERE, null, ex);
                                 }
-                                askToCheckNotifications();
                             }
                         });
+                        t.start();
                     }
                     return true;
                 }
@@ -634,7 +659,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
             Logger.getLogger(TCPConnection.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
-        server.userLogout(user_id);
+        server.userLogout(my_user_id);
         return true;
     }
     
@@ -649,7 +674,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         }
         
         if(!section[1].substring(0, 6).equalsIgnoreCase("-date=")){
-            System.out.println("param '-date=' not found!");
+            System.out.println("arg '-date=' not found!");
             return null;
         }
         date = section[1].substring(6);
@@ -661,14 +686,14 @@ public class TCPConnection extends Thread implements Connection{//A connection w
                 + "evt.\"begin_timestamp\", evt.\"end_timestamp\", "
                 + "evt.\"local\", evt.\"description\", eu.\"accepted\" "
                 + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
-                + "WHERE evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = \'"+user_id+"\'";
+                + "WHERE evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = \'"+my_user_id+"\'";
         }else{
             sql = "SELECT evt.\"event_id\", evt.\"event_name\", "
                 + "evt.\"begin_timestamp\", evt.\"end_timestamp\", "
                 + "evt.\"local\", evt.\"description\", eu.\"accepted\" "
                 + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
                 + "WHERE evt.\"event_id\" = eu.\"event_id\" AND "
-                + "eu.\"user_id\" = \'"+user_id+"\' AND begin_timestamp::date = \'"+date+"\'";
+                + "eu.\"user_id\" = \'"+my_user_id+"\' AND begin_timestamp::date = \'"+date+"\'";
         }
 
         if(!postgresql.isConnectionActive())
@@ -710,8 +735,8 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         LinkedList<Long> receivedNotifications = new LinkedList<>();
         //Get the notifications from the DB
         String sql = "SELECT nt.\"notification_id\", nt.\"text\" "
-                + "FROM \"public\".\"Notifications\" as nt "
-                + "WHERE nt.\"user_id\" = \'"+user_id+"\'";
+                + "FROM \"public\".\"Notification\" as nt "
+                + "WHERE nt.\"user_id\" = \'"+my_user_id+"\'";
         
         if(!postgresql.isConnectionActive())
             postgresql.connectToDB();
@@ -775,7 +800,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
     }
      /**
      * Gets all busy times for that user on the specified date
-     * @param user the user_id for the user to consult
+     * @param user the my_user_id for the user to consult
      * @param date a string containing a date in the format: YYYY-MM-DD
      * @return a LinkedList of Strings in the format: begin_time&end_time
      */
@@ -810,8 +835,9 @@ public class TCPConnection extends Thread implements Connection{//A connection w
     }
     
     private boolean inviteToEvent(String message){
-        Long guestid, eventid;
-        String sql, notification;
+        Long guestid = 0L;
+        Long eventid;
+        String guest, sql, notification;
         
         //Get the arguments from the message string
         String[] section = message.split("&");
@@ -820,13 +846,13 @@ public class TCPConnection extends Thread implements Connection{//A connection w
             return false;
         }
         if(!section[1].substring(0, 7).equalsIgnoreCase("-guest=")){
-            System.out.println("param '-guest=' not found!");
+            System.out.println("arg '-guest=' not found!");
             return false;
         }
-        guestid = Long.parseLong(section[1].substring(7));
+        guest = section[1].substring(7);
         
         if(!section[2].substring(0, 10).equalsIgnoreCase("-event_id=")){
-            System.out.println("param '-begin=' not found!");
+            System.out.println("arg '-begin=' not found!");
             return false;
         }
         eventid = Long.parseLong(section[2].substring(10));
@@ -836,7 +862,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         sql = "SELECT evt.\"event_name\" "
             + "FROM \"public\".\"Event\" as evt, \"public\".\"Event_User\" as eu "
             + "WHERE evt.\"event_id\" = \'"+eventid+"\' AND "
-            + "evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = "+user_id+"";
+            + "evt.\"event_id\" = eu.\"event_id\" AND eu.\"user_id\" = "+my_user_id+"";
         
         if(!postgresql.isConnectionActive())
             postgresql.connectToDB();
@@ -851,10 +877,11 @@ public class TCPConnection extends Thread implements Connection{//A connection w
             return false;
         }
         
-        //Secondly we must check if there is an user with the given user_id
+        //Secondly we must check if there is an user with the given user_name
+        //and get his my_user_id
         sql = "SELECT u.\"user_id\" "
             + "FROM \"public\".\"User\" as u "
-            + "WHERE u.\"user_id\" = "+guestid;
+            + "WHERE u.\"user_name\" = \'"+guest+"\'";
         
         columnName = new HashSet<>();
         columnName.add("user_id");
@@ -865,6 +892,25 @@ public class TCPConnection extends Thread implements Connection{//A connection w
             System.out.println("User not found!");
             return false;
         }
+        
+        for(Map<String, String> queryResulti : queryResult){
+            guestid = Long.parseLong(queryResulti.get("user_id"));
+        }
+        
+        //Check if the guest is already invited
+        sql = "SELECT eu.\"event_id\" "
+            + "FROM \"public\".\"Event_User\" as eu "
+            + "WHERE \"event_id\" = "+eventid+" AND \"user_id\" = "+guestid;
+        columnName = new HashSet<>();
+        columnName.add("event_id");
+        
+        queryResult = postgresql.processSelectQuery(sql, columnName);
+        
+        if(queryResult.size()>0){
+            System.out.println("Guest already invited!");
+            return true;
+        }
+        
         
         //Insert a Event_User for the event and the guest
         sql = "INSERT INTO \"public\".\"Event_User\" (event_id, user_id, accepted)"
@@ -879,7 +925,85 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         return true;         
     }
     
+    private boolean answerInvitation(String message){
+        Long eventid = null;
+        Long event_ownerid = null;
+        boolean accept = false;
+        String sql = null;
+        String notificationtxt = null;
+        
+        //Get the arguments from the message string
+        String[] section = message.split("&");
+        if(section.length!=3)
+            return false;
+        if(!section[1].substring(0, 8).equalsIgnoreCase("-accept=")){
+            System.out.println("arg '-accept=' not found!");
+            return false;
+        }
+        accept = Boolean.parseBoolean(section[1].substring(8));
+        
+        if(!section[2].substring(0,10).equalsIgnoreCase("-event_id=")){
+            System.out.println("arg '-event_id=' not found!");
+            return false;
+        }
+        eventid = Long.parseLong(section[2].substring(10));
+        
+        //Before the update we must check if there is
+        //an EventUser with the given event_id the current user's user_id
+        sql = "SELECT eu.\"event_id\" "
+            + "FROM \"public\".\"Event_User\" as eu "
+            + "WHERE \"event_id\" = "+eventid+" AND \"user_id\" = "+my_user_id;
+        
+        if(!postgresql.isConnectionActive())
+            postgresql.connectToDB();
+
+        HashSet<String> columnName = new HashSet<>();
+        columnName.add("event_id");
+        
+        LinkedList<Map<String, String>> queryResult;
+        queryResult = postgresql.processSelectQuery(sql, columnName);
+        
+        if(queryResult.size()<=0){
+            System.out.println("EventUser not found!");
+            return false;
+        }
+        
+        if(accept){
+            //Execute the update on the DB
+            sql = "UPDATE  \"public\".\"Event_User\""
+                + "SET \"accepted\" = \'" + accept + "\'"
+                + "WHERE \"event_id\" = "+eventid+" AND \"user_id\" = "+my_user_id;
+        }else{
+            //Delete the row from the DB
+            sql = "DELETE FROM  \"public\".\"Event_User\" as eu "
+                + "WHERE \"event_id\" = "+eventid+" AND \"user_id\" = "+my_user_id;
+        }
+        
+        int nRowsUpdated = postgresql.processUpdate(sql);
+        System.out.println(""+nRowsUpdated+" rows updated!");
+        
+        //Notify the event's owner of our answer to the invitation
+        notificationtxt = "INVITE_ANSWER&-event_id="+eventid
+                        +"&-guest="+my_user_name+"&accept="+accept;
+        sql = "SELECT evt.\"owner_id\" "
+            + "FROM \"public\".\"Event\" as evt "
+            + "WHERE evt.\"event_id\" = "+eventid;
+        
+        columnName = new HashSet<>();
+        columnName.add("owner_id");
+        
+        queryResult = postgresql.processSelectQuery(sql, columnName);
+        for(Map<String, String> queryResulti : queryResult){
+            event_ownerid = Long.parseLong(queryResulti.get("owner_id"));
+        }
+        
+        notify(event_ownerid, notificationtxt);
+        
+        return true;
+    }
+    
     private void notify(long user_id, String text){
+        //Insert the notification at the DB
         String sql = "INSERT INTO \"public\".\"Notification\" (user_id, text) "
                    + "VALUES ("+user_id+", \'"+text+"\')";
         
@@ -888,6 +1012,7 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         long notificationId = postgresql.processInsert(sql, "notification_id");
         System.out.println("New notification created id="+notificationId);
         
+        //Ask user to check notifications if he is online
         if(server.isUserOnline(user_id)){
             server.notifyUser(user_id);
         }
@@ -896,8 +1021,8 @@ public class TCPConnection extends Thread implements Connection{//A connection w
     private boolean testNewNotifications(){
         //Get the notifications from the DB
         String sql = "SELECT nt.\"notification_id\""
-                + "FROM \"public\".\"Notifications\" as nt "
-                + "WHERE nt.\"user_id\" = \'"+user_id+"\'";
+                + "FROM \"public\".\"Notification\" as nt "
+                + "WHERE nt.\"user_id\" = \'"+my_user_id+"\'";
         
         if(!postgresql.isConnectionActive())
             postgresql.connectToDB();
@@ -907,9 +1032,13 @@ public class TCPConnection extends Thread implements Connection{//A connection w
         
         LinkedList<Map<String, String>> queryResult = postgresql.processSelectQuery(sql, columnName);
         
-        return queryResult.size()<=0;
+        //Returns if there are notifications for the current user on the DB
+        return queryResult.size()>0;
     }
-
+    
+    /**
+     * Asks the current user to check his notifications
+     */
     @Override
     public void askToCheckNotifications() {
         try {
